@@ -33,13 +33,33 @@ jobs:
 
       - name: Inject KPatch Pre-Patching into build.sh
         run: |
-          # Download official KernelPatch tools
           wget -q https://github.com/bmax121/KernelPatch/releases/download/0.13.8/kptools-linux
           wget -q https://github.com/bmax121/KernelPatch/releases/download/0.13.8/kpimg-android
           chmod +x kptools-linux
 
-          # Patch build.sh to embed KPatch right after kernel compile
-          sed -i '/BUILD_KERNEL/a \    echo "I: Embedding KPatch into Image..."; ./kptools-linux -p -i "$TOP/arch/arm64/boot/Image" -s "${{ inputs.superkey }}" -k kpimg-android -o "$TOP/arch/arm64/boot/Image.patched" && mv -f "$TOP/arch/arm64/boot/Image.patched" "$TOP/arch/arm64/boot/Image"' build.sh
+          python3 -c '
+          with open("build.sh", "r") as f:
+              content = f.read()
+
+          target = "BUILD_KERNEL\nif [[ $BUILD_VARIANT == recovery ]]"
+          replacement = """BUILD_KERNEL
+          echo "=== EMBEDDING KPATCH INTO KERNEL IMAGE ==="
+          $TOP/kptools-linux -p -i "$TOP/arch/arm64/boot/Image" -s "${{ inputs.superkey }}" -k "$TOP/kpimg-android" -o "$TOP/arch/arm64/boot/Image.patched"
+          if [ -f "$TOP/arch/arm64/boot/Image.patched" ]; then
+              mv -f "$TOP/arch/arm64/boot/Image.patched" "$TOP/arch/arm64/boot/Image"
+              echo "=== KPATCH EMBEDDED SUCCESSFULLY ==="
+          else
+              echo "=== ERROR: KPATCH EMBED FAILED ==="
+              exit 1
+          fi
+          if [[ $BUILD_VARIANT == recovery ]]"""
+
+          assert target in content, "Target not found in build.sh"
+          content = content.replace(target, replacement, 1)
+
+          with open("build.sh", "w") as f:
+              f.write(content)
+          '
 
       - name: Build Kernel
         run: |
