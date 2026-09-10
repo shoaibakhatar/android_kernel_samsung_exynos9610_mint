@@ -43,8 +43,8 @@ jobs:
 
           target = "BUILD_KERNEL\nif [[ $BUILD_VARIANT == recovery ]]"
           replacement = """BUILD_KERNEL
-          echo "=== EMBEDDING KPATCH INTO KERNEL IMAGE ==="
-          $TOP/kptools-linux -p -i "$TOP/arch/arm64/boot/Image" -s "${{ inputs.superkey }}" -k "$TOP/kpimg-android" -o "$TOP/arch/arm64/boot/Image.patched"
+          echo "=== EMBEDDING KPATCH INTO KERNEL IMAGE VIA DOCKER ==="
+          docker run --rm -v "$TOP":/work -w /work ubuntu:24.04 /bin/bash -c "chmod +x /work/kptools-linux && /work/kptools-linux -p -i /work/arch/arm64/boot/Image -s \"${{ inputs.superkey }}\" -k /work/kpimg-android -o /work/arch/arm64/boot/Image.patched"
           if [ -f "$TOP/arch/arm64/boot/Image.patched" ]; then
               mv -f "$TOP/arch/arm64/boot/Image.patched" "$TOP/arch/arm64/boot/Image"
               echo "=== KPATCH EMBEDDED SUCCESSFULLY ==="
