@@ -1,0 +1,54 @@
+name: Build M30s A11 OneUI KSU + KPatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      superkey:
+        description: 'SuperKey for KPatch (at least 8 chars)'
+        required: true
+        default: '12345678'
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bc bison flex libssl-dev libelf-dev \
+            libncurses5-dev libtinfo5 git zip cpio python3 python-is-python3 tar wget curl
+
+      - name: Enable KALLSYMS in Kernel Config
+        run: |
+          echo "CONFIG_KALLSYMS=y" >> kernel/configs/mint_variant_oneui.config
+          echo "CONFIG_KALLSYMS_ALL=y" >> kernel/configs/mint_variant_oneui.config
+
+      - name: Inject KPatch Pre-Patching into build.sh
+        run: |
+          # Download official KernelPatch tools
+          wget -q https://github.com/bmax121/KernelPatch/releases/download/0.13.8/kptools-linux
+          wget -q https://github.com/bmax121/KernelPatch/releases/download/0.13.8/kpimg-android
+          chmod +x kptools-linux
+
+          # Patch build.sh to embed KPatch right after kernel compile
+          sed -i '/BUILD_KERNEL/a \    echo "I: Embedding KPatch into Image..."; ./kptools-linux -p -i "$TOP/arch/arm64/boot/Image" -s "${{ inputs.superkey }}" -k kpimg-android -o "$TOP/arch/arm64/boot/Image.patched" && mv -f "$TOP/arch/arm64/boot/Image.patched" "$TOP/arch/arm64/boot/Image"' build.sh
+
+      - name: Build Kernel
+        run: |
+          chmod +x build.sh ksu.sh
+          chmod -R +x tools/make/bin/
+          ./build.sh -d m30s -a 11 -v oneui -k -p -c
+
+      - name: Upload Kernel ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mint-Kernel-M30s-A11-OneUI-KSU-KPatch
+          path: out/*.zip
