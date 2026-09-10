@@ -1,4 +1,4 @@
-name: Build M30s A11 OneUI KernelSU-Next
+name: Build M30s A11 OneUI KernelSU-Next permissive
 
 on:
   workflow_dispatch:
@@ -38,7 +38,7 @@ jobs:
         run: |
           chmod +x build.sh ksu.sh
           chmod -R +x tools/make/bin/
-          ./build.sh -d m30s -a 11 -v oneui -k -c
+          ./build.sh -d m30s -a 11 -v oneui -k -p -c
 
       - name: Upload Kernel ZIP
         uses: actions/upload-artifact@v4
