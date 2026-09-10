@@ -22,6 +22,7 @@ jobs:
 
       - name: Enable KALLSYMS in Kernel Config
         run: |
+          sed -i 's/\r$//' init/Kconfig kernel/configs/*.config arch/arm64/configs/* 2>/dev/null || true
           echo "CONFIG_KALLSYMS=y" >> kernel/configs/mint_variant_oneui.config
           echo "CONFIG_KALLSYMS_ALL=y" >> kernel/configs/mint_variant_oneui.config
 
