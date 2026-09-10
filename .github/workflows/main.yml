@@ -20,25 +20,58 @@ jobs:
             build-essential bc bison flex libssl-dev libelf-dev \
             libncurses5-dev libtinfo5 git zip cpio python3 python-is-python3 tar wget curl
 
-      - name: Setup KPatch-Next 0.13.5-2
+      - name: Build and Inject KernelPatch 0.13.8 (Pre-GKI 4.14 Compatible)
         run: |
-          wget -q https://github.com/KernelSU-Next/KPatch-Next/releases/download/0.13.5-2/kptools-linux
-          wget -q https://github.com/KernelSU-Next/KPatch-Next/releases/download/0.13.5-2/kpimg-linux
+          # 1. Download official KernelPatch 0.13.8 kptools
+          wget -q https://github.com/bmax121/KernelPatch/releases/download/0.13.8/kptools-linux
           chmod +x kptools-linux
 
+          # 2. Download Arm toolchain used by KernelPatch
+          wget -q https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf.tar.xz
+          tar -xf arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf.tar.xz
+
+          # 3. Clone KernelPatch 0.13.8 source (contains 4.14 arm64 anchor bugfix commit 7671d6b)
+          git clone --depth=1 -b 0.13.8 https://github.com/bmax121/KernelPatch.git kp_src
+
+          # 4. Patch supercall.c: allow root (uid 0) bypass AND return KPatch-Next magic (0x20262026)
+          python3 -c '
+          with open("kp_src/kernel/patch/common/supercall.c", "r") as f:
+              s = f.read()
+
+          old_key = "    if (has_preset_superkey()) {"
+          new_key = "    if (uid == 0) {\n        is_trusted_caller = 1;\n        is_authed = 1;\n    } else if (has_preset_superkey()) {"
+          assert old_key in s
+          s = s.replace(old_key, new_key, 1)
+
+          old_hello = "return SUPERCALL_HELLO_MAGIC;"
+          new_hello = "return 0x20262026;"
+          assert old_hello in s
+          s = s.replace(old_hello, new_hello, 1)
+
+          with open("kp_src/kernel/patch/common/supercall.c", "w") as f:
+              f.write(s)
+          '
+
+          # 5. Compile kpimg
+          export TARGET_COMPILE=$(pwd)/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf/bin/aarch64-none-elf-
+          export ANDROID=1
+          make -C kp_src/kernel hdr kpimg
+          cp -f kp_src/kernel/kpimg ./kpimg-android
+
+          # 6. Inject patching into build.sh with -s 12345678 (prevents random key early boot crash)
           python3 -c '
           with open("build.sh", "r") as f:
               content = f.read()
 
           target = "BUILD_KERNEL\nif [[ $BUILD_VARIANT == recovery ]]"
           replacement = """BUILD_KERNEL
-          echo "=== EMBEDDING KPATCH-NEXT INTO KERNEL IMAGE VIA DOCKER ==="
-          docker run --rm -v "$TOP":/work -w /work ubuntu:24.04 /bin/bash -c "chmod +x /work/kptools-linux && /work/kptools-linux -p -i /work/arch/arm64/boot/Image -k /work/kpimg-linux -o /work/arch/arm64/boot/Image.patched"
+          echo "=== EMBEDDING KPATCH INTO KERNEL IMAGE VIA DOCKER ==="
+          docker run --rm -v "$TOP":/work -w /work ubuntu:24.04 /bin/bash -c "chmod +x /work/kptools-linux && /work/kptools-linux -p -i /work/arch/arm64/boot/Image -s \"12345678\" -k /work/kpimg-android -o /work/arch/arm64/boot/Image.patched"
           if [ -f "$TOP/arch/arm64/boot/Image.patched" ]; then
               mv -f "$TOP/arch/arm64/boot/Image.patched" "$TOP/arch/arm64/boot/Image"
-              echo "=== KPATCH-NEXT EMBEDDED SUCCESSFULLY ==="
+              echo "=== KPATCH EMBEDDED SUCCESSFULLY ==="
           else
-              echo "=== ERROR: KPATCH-NEXT EMBED FAILED ==="
+              echo "=== ERROR: KPATCH EMBED FAILED ==="
               exit 1
           fi
           if [[ $BUILD_VARIANT == recovery ]]"""
