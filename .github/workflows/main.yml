@@ -2,12 +2,6 @@ name: Build M30s A11 OneUI KSU + KPatch
 
 on:
   workflow_dispatch:
-    inputs:
-      superkey:
-        description: 'SuperKey for KPatch (at least 8 chars)'
-        required: true
-        default: '12345678'
-        type: string
 
 jobs:
   build:
@@ -28,13 +22,15 @@ jobs:
 
       - name: Enable KALLSYMS in Kernel Config
         run: |
+          sed -i 's/# CONFIG_DEBUG_KERNEL is not set/CONFIG_DEBUG_KERNEL=y/' arch/arm64/configs/exynos9610-m30s_core_defconfig
+          echo "CONFIG_DEBUG_KERNEL=y" >> kernel/configs/mint_variant_oneui.config
           echo "CONFIG_KALLSYMS=y" >> kernel/configs/mint_variant_oneui.config
           echo "CONFIG_KALLSYMS_ALL=y" >> kernel/configs/mint_variant_oneui.config
 
       - name: Inject KPatch Pre-Patching into build.sh
         run: |
-          wget -q https://github.com/bmax121/KernelPatch/releases/download/0.13.8/kptools-linux
-          wget -q https://github.com/bmax121/KernelPatch/releases/download/0.13.8/kpimg-android
+          wget -q https://github.com/KernelSU-Next/KPatch-Next/releases/download/0.13.5-2/kptools-linux
+          wget -q https://github.com/KernelSU-Next/KPatch-Next/releases/download/0.13.5-2/kpimg-linux
           chmod +x kptools-linux
 
           python3 -c '
@@ -44,7 +40,7 @@ jobs:
           target = "BUILD_KERNEL\nif [[ $BUILD_VARIANT == recovery ]]"
           replacement = """BUILD_KERNEL
           echo "=== EMBEDDING KPATCH INTO KERNEL IMAGE VIA DOCKER ==="
-          docker run --rm -v "$TOP":/work -w /work ubuntu:24.04 /bin/bash -c "chmod +x /work/kptools-linux && /work/kptools-linux -p -i /work/arch/arm64/boot/Image -s \"${{ inputs.superkey }}\" -k /work/kpimg-android -o /work/arch/arm64/boot/Image.patched"
+          docker run --rm -v "$TOP":/work -w /work ubuntu:24.04 /bin/bash -c "chmod +x /work/kptools-linux && /work/kptools-linux -p -i /work/arch/arm64/boot/Image -k /work/kpimg-linux -o /work/arch/arm64/boot/Image.patched"
           if [ -f "$TOP/arch/arm64/boot/Image.patched" ]; then
               mv -f "$TOP/arch/arm64/boot/Image.patched" "$TOP/arch/arm64/boot/Image"
               echo "=== KPATCH EMBEDDED SUCCESSFULLY ==="
