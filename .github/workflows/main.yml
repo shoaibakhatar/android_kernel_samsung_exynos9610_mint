@@ -20,11 +20,6 @@ jobs:
             build-essential bc bison flex libssl-dev libelf-dev \
             libncurses5-dev libtinfo5 git zip cpio python3 python-is-python3 tar wget curl
 
-      - name: Enable KALLSYMS in Kernel Config
-        run: |
-          sed -i 's/\r$//' init/Kconfig kernel/configs/*.config arch/arm64/configs/* 2>/dev/null || true
-          echo "CONFIG_KALLSYMS=y" >> kernel/configs/mint_variant_oneui.config
-
       - name: Setup KPatch-Next 0.13.5-2
         run: |
           wget -q https://github.com/KernelSU-Next/KPatch-Next/releases/download/0.13.5-2/kptools-linux
